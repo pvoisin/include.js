@@ -1,12 +1,18 @@
 var Module = require("module");
 var FileSystem = require("fs");
 
-var fragment = "if(typeof define !== \"function\") { var define = require(\"amdefine\")(module); }";
+var fragment;
 
-function include() {
-}
+require.extensions[".js"] = function(module, file) {
+	// Let's remove UTF-8 BOM because Node's buffer-to-string conversion translates it to UTF-16 BOM:
+	var script = stripByteOrderMarker(FileSystem.readFileSync(file, "utf8"));
 
-fragment += "\n" + include;
+	if(!/amdefine\.js$/.test(module.id)) {
+		script = fragment + script;
+	}
+
+	module._compile(script, file);
+};
 
 function stripByteOrderMarker(text) {
 	if(text.charCodeAt(0) === 0xFEFF) {
@@ -15,22 +21,20 @@ function stripByteOrderMarker(text) {
 	return text;
 }
 
-function intercept(module, file) {
-	// Let's remove UTF-8 BOM because Node's buffer-to-string conversion translates it to UTF-16 BOM:
-	var contents = stripByteOrderMarker(FileSystem.readFileSync(file, "utf8"));
-console.log(module.id);
-	if(!/include\.js$/.test(module.id)) {
-		contents = fragment + contents;
+function configure(loader) {
+	function include() {
+		var loader/*%LOADER%*/;
+		return loader.apply(this, arguments);
 	}
-contents = "console.log('AAAAAA', define);" + contents;
-console.log(contents);
-	module._compile(contents, file);
-}
 
-intercept._id = "include.js/intercept";
+	fragment = "if(typeof define !== \"function\") { var define = require(\"amdefine\")(module, include); }"
+		+ ("\n" + include).replace("/*%LOADER%*/", " = " + (loader ? "require(\"" + loader + "\")(require)" : "require"));
+};
 
-var original = Module._extensions[".js"];
+// Let's allow simple usage: `require("include.js")`.
+configure();
 
-if(!original._id || original._id !== intercept._id) {
-	Module._extensions[".js"] = intercept;
-}
+module.exports = {
+	// Advanced usage: `require("include.js").configure("loader.js")`.
+	configure: configure
+};
