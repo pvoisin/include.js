@@ -29,6 +29,10 @@ function configure(loader) {
 
 	fragment = "if(typeof define !== \"function\") { var define = require(\"amdefine\")(module, include); }"
 		+ ("\n" + include).replace("/*%LOADER%*/", " = " + (loader ? "require(\"" + loader + "\")(require)" : "require"));
+
+	// Let's insert `fragment` right before the first statement in the module (without introducing any new line)
+	// so that we won't need any particular source maps for debugging and could read stack traces fairly naturally:
+	fragment = fragment.replace(/\n\s*/g, "").replace(/\s+(\{|\})\s+/g, "$1");
 };
 
 // Let's allow simple usage: `require("include.js")`.
